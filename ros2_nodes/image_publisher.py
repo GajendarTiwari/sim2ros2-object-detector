@@ -1,21 +1,9 @@
-#!/usr/bin/env python3
-"""
-image_publisher.py
-
-A simple ROS2 node that acts like a fake camera.
-It reads image files from a folder, one at a time, and publishes
-them to the "/camera/image_raw" topic every few seconds.
-
-Think of this as standing in for a real robot's camera - later you
-could swap this out for an actual webcam or an Isaac Sim camera feed
-without touching the detector node at all.
-"""
 import os
+import numpy as np
+import cv2
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
-import cv2
 
 IMAGE_FOLDER = "/workspace/sample_images"
 PUBLISH_EVERY_SECONDS = 3.0
@@ -25,7 +13,6 @@ class ImagePublisher(Node):
     def __init__(self):
         super().__init__("image_publisher")
         self.publisher_ = self.create_publisher(Image, "/camera/image_raw", 10)
-        self.bridge = CvBridge()
 
         self.image_files = sorted([
             f for f in os.listdir(IMAGE_FOLDER)
@@ -53,7 +40,15 @@ class ImagePublisher(Node):
             self.index += 1
             return
 
-        msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+        frame = np.ascontiguousarray(frame, dtype=np.uint8)
+        msg = Image()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.height, msg.width = frame.shape[0], frame.shape[1]
+        msg.encoding = "bgr8"
+        msg.is_bigendian = 0
+        msg.step = msg.width * 3
+        msg.data = frame.tobytes()
+
         self.publisher_.publish(msg)
         self.get_logger().info(f"Published: {filename}")
         self.index += 1
